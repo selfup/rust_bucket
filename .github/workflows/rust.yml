@@ -18,6 +18,4 @@ jobs:
     - uses: actions/checkout@v2
     - uses: Swatinem/rust-cache@v1.3.0
     - name: Test
-      run: "cargo build --verbose && cargo test"
-    - name: Bench
-      run: "cargo bench"
+      run: "cargo build --verbose && cargo test && cargo build --release && cargo bench"
