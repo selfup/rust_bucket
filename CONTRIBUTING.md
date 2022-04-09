@@ -16,7 +16,7 @@ But to avoid failures on stable (**if you are unsure**) here is a Vagrantfile th
 
 **Please change the `<PATH_TO_YOUR_LOCAL_RUST_BUCKET_FORK_OR_PROJECT>` to your hosts project path!**
 
-```
+```ruby
 $script = <<SCRIPT
   sudo apt-get update
   sudo /usr/sbin/update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
