@@ -22,7 +22,9 @@ use std::path::Path;
 pub mod errors;
 use errors::{Error, Result};
 
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+// Structure for data storage *********************************************************************
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct TableData<T: Serialize> {
     pub table: String,
     pub next_id: String,
@@ -34,6 +36,7 @@ pub struct TableData<T: Serialize> {
 pub fn update_table<T: Serialize>(table: &str, t: &T) -> Result<()> {
     let serialized = serde_json::to_string(&create_base_data(table, t))?;
     let db_table = Path::new("./db").join(table);
+
     let mut buffer = File::create(db_table)?;
     buffer.write_all(serialized.as_bytes())?;
 
