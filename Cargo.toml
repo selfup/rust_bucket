@@ -1,16 +1,16 @@
 [package]
 name = "rust_bucket"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Matt Pindell <pindell.m@gmail.com>", "Regis Boudinot <boudinot.regis@yahoo.com>", "Alex Hill <alexander.d.hill.89@gmail.com>"]
-build = "build.rs"
-
-[features]
-default = []
-benchmarks = []
+edition = "2021"
 
 [dependencies]
-serde = "0.7.11"
-serde_json = "0.7.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.79"
 
-[build-dependencies]
-serde_codegen = "0.7.11"
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "main_benchmark"
+harness = false

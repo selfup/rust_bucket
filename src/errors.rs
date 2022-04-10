@@ -10,15 +10,15 @@
 //! Error and Result module.
 
 use std::error as std_error;
-use std::result as std_result;
-use std::io;
 use std::fmt::{self, Display, Formatter};
+use std::io;
 use std::num::ParseIntError;
+use std::result as std_result;
 
 use serde_json;
 
 // Bring the constructors of Error into scope so we can use them without an `Error::` incantation
-use self::Error::{Io, Serde, ParseInt, NoSuchTable, NoSuchKey};
+use self::Error::{Io, NoSuchKey, NoSuchTable, ParseInt, Serde};
 
 /// A Result alias often returned from methods that can fail for `rust_bucket` exclusive reasons.
 pub type Result<T> = std_result::Result<T, Error>;
@@ -50,64 +50,58 @@ pub enum Error {
 }
 
 impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Error {
-        Io(e)
+    fn from(err: io::Error) -> Error {
+        Io(err)
     }
 }
 
 impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Error {
-        Serde(e)
+    fn from(err: serde_json::Error) -> Error {
+        Serde(err)
     }
 }
 
 impl From<ParseIntError> for Error {
-    fn from(e: ParseIntError) -> Error {
-        ParseInt(e)
+    fn from(err: ParseIntError) -> Error {
+        ParseInt(err)
     }
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> std_result::Result<(), fmt::Error> {
+    fn fmt(&self, formatter: &mut Formatter) -> std_result::Result<(), fmt::Error> {
         match *self {
-            Io(ref e) => {
-                try!(write!(f, "Error performing IO: "));
-                e.fmt(f)
+            Io(ref err) => {
+                write!(formatter, "Error performing IO: ")?;
+                err.fmt(formatter)
             }
-            Serde(ref e) => {
-                try!(write!(f, "Error (de)serializing: "));
-                e.fmt(f)
+            Serde(ref err) => {
+                write!(formatter, "Error (de)serializing: ")?;
+                err.fmt(formatter)
             }
-            ParseInt(ref e) => {
-                try!(write!(f, "Error parsing an integer: "));
-                e.fmt(f)
+            ParseInt(ref err) => {
+                write!(formatter, "Error parsing an integer: ")?;
+                err.fmt(formatter)
             }
-            NoSuchTable(ref t) => {
-                write!(f,
-                       "Tried to open the table \"{}\", which does not exist.",
-                       t)
+            NoSuchTable(ref table) => {
+                write!(
+                    formatter,
+                    "Tried to open the table \"{}\", which does not exist.",
+                    table,
+                )
             }
-            NoSuchKey => write!(f, "Tried to retrieve a key which doesn't exist."),
+            NoSuchKey => write!(formatter, "Tried to retrieve a key which doesn't exist."),
         }
     }
 }
 
 impl std_error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Io(ref e) => e.description(),
-            Serde(ref e) => e.description(),
-            ParseInt(ref e) => e.description(),
-            NoSuchTable(_) => "Tried to open a table that doesn't exist",
-            NoSuchKey => "Tried to retrieve a key which doesn't exist",
-        }
-    }
+    // description is deprecated as of rust 1.42
 
-    fn cause(&self) -> Option<&std_error::Error> {
+    fn cause(&self) -> Option<&dyn std_error::Error> {
         match *self {
-            Io(ref e) => Some(e),
-            Serde(ref e) => Some(e),
-            ParseInt(ref e) => Some(e),
+            Io(ref err) => Some(err),
+            Serde(ref err) => Some(err),
+            ParseInt(ref err) => Some(err),
             NoSuchTable(_) => None,
             NoSuchKey => None,
         }
