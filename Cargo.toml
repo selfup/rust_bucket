@@ -1,15 +1,19 @@
 [package]
 name = "rust_bucket"
 version = "0.2.0"
-authors = ["Matt Pindell <pindell.m@gmail.com>", "Regis Boudinot <boudinot.regis@yahoo.com>", "Alex Hill <alexander.d.hill.89@gmail.com>"]
-edition = "2021"
+authors = [
+    "Matt Pindell <pindell.m@gmail.com>",
+    "Regis Boudinot <boudinot.regis@yahoo.com>",
+    "Alex Hill <alexander.d.hill.89@gmail.com>",
+]
+edition = "2024"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.79"
+serde_json = "1.0"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = { version = "0.5.1", features = ["html_reports"] }
 
 [[bench]]
 name = "main_benchmark"

@@ -17,3 +17,11 @@
 * Project dependent
 * Not yet on crates.io
 * Performance is heavily influenced by SSD / HDD io speeds (but storage is cheap)
+
+### Benchmarks
+
+```
+cargo bench
+
+open target/criterion/report/index.html
+```

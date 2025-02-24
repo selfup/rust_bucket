@@ -1,6 +1,7 @@
 use rust_bucket::*;
+use std::time::Duration;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 extern crate serde;
 extern crate serde_json;
@@ -60,15 +61,26 @@ fn bench_store_update_read_and_delete_json(crit: &mut Criterion) {
     drop_table("test7").unwrap();
 }
 
-criterion_group!(
-    benches,
-    bench_create_table,
-    bench_find,
-    bench_json_find,
-    bench_json_table_records,
-    bench_read_table,
-    bench_store_update_read_and_delete_json,
-    bench_update_table
-);
+fn combined_benchmarks(c: &mut Criterion) {
+    bench_create_table(c);
+    bench_find(c);
+    bench_json_find(c);
+    bench_json_table_records(c);
+    bench_read_table(c);
+    bench_store_update_read_and_delete_json(c);
+    bench_update_table(c);
+}
+
+fn configure() -> Criterion {
+    Criterion::default()
+        .sample_size(100)
+        .measurement_time(Duration::from_millis(15))
+}
+
+criterion_group! {
+    name = benches;
+    config = configure();
+    targets = combined_benchmarks
+}
 
 criterion_main!(benches);
