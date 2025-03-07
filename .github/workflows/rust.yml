@@ -2,23 +2,24 @@ name: Rust
 
 on:
   push:
-    branches: [master]
+    branches: [ main ]
   pull_request:
-    branches: [master]
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
+
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1.3.0
-      - name: Update Rust
-        run: rustup update
-      - name: Test
-        run: "cargo build --verbose && cargo test"
-      - name: Bench
-        run: "cargo build --release --verbose && cargo bench"
+    - uses: actions/checkout@v3
+    - name: Rustup Update
+      run: rustup update
+    - uses: Swatinem/rust-cache@v2
+    - name: Tests
+      run: cargo test --verbose
+    - name: Benches
+      run: cargo bench
