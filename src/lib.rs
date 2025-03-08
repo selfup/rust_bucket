@@ -16,8 +16,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io;
+use std::io::BufWriter;
 use std::io::prelude::*;
 use std::path::Path;
+use std::path::PathBuf;
 
 pub mod errors;
 use errors::{Error, Result};
@@ -34,11 +36,13 @@ pub struct TableData<T: Serialize> {
 // Public functions *******************************************************************************
 
 pub fn update_table<T: Serialize>(table: &str, t: &T) -> Result<()> {
-    let serialized = serde_json::to_string(&create_base_data(table, t))?;
-    let db_table = Path::new("./db").join(table);
+    let db_table = db_table(table);
 
-    let mut buffer = File::create(db_table)?;
-    buffer.write_all(serialized.as_bytes())?;
+    let writer = buffed_writer(db_table)?;
+
+    let data = &create_base_data(table, t);
+
+    serde_json::to_writer(writer, data)?;
 
     Ok(())
 }
@@ -46,21 +50,31 @@ pub fn update_table<T: Serialize>(table: &str, t: &T) -> Result<()> {
 pub fn create_table<T: Serialize>(table: &str, t: &T) -> Result<()> {
     create_db_dir()?;
 
-    let serialized = serde_json::to_string(&create_base_data(table, t))?;
-    let db_table = Path::new("./db").join(table);
+    let db_table = db_table(table);
 
     if db_table.exists() {
         return Ok(());
     }
 
-    let mut buffer = File::create(db_table)?;
-    buffer.write_all(serialized.as_bytes())?;
+    let writer = buffed_writer(db_table)?;
+
+    let data = &create_base_data(table, t);
+
+    serde_json::to_writer(writer, data)?;
 
     Ok(())
 }
 
 pub fn create_empty_table<T: Serialize>(table: &str) -> Result<()> {
     create_db_dir()?;
+
+    let db_table = db_table(table);
+
+    if db_table.exists() {
+        return Ok(());
+    }
+
+    let file = File::create(db_table)?;
 
     let record: HashMap<String, T> = HashMap::new();
 
@@ -70,15 +84,7 @@ pub fn create_empty_table<T: Serialize>(table: &str) -> Result<()> {
         records: record,
     };
 
-    let serialized = serde_json::to_string(&data)?;
-    let db_table = Path::new("./db").join(table);
-
-    if db_table.exists() {
-        return Ok(());
-    }
-
-    let mut buffer = File::create(db_table)?;
-    buffer.write_all(serialized.as_bytes())?;
+    serde_json::to_writer(file, &data)?;
 
     Ok(())
 }
@@ -89,12 +95,13 @@ pub fn read_table(table: &str) -> Result<String> {
     let mut file = match File::open(db_table) {
         Ok(file) => file,
         Err(ref err) if err.kind() == io::ErrorKind::NotFound => {
-            return Err(Error::NoSuchTable(table.to_owned()))
+            return Err(Error::NoSuchTable(table.to_owned()));
         }
         Err(err) => return Err(Error::Io(err)),
     };
 
     let mut buffer = String::new();
+
     file.read_to_string(&mut buffer)?;
 
     Ok(buffer)
@@ -102,6 +109,7 @@ pub fn read_table(table: &str) -> Result<String> {
 
 pub fn drop_table(table: &str) -> io::Result<()> {
     let table_path = Path::new("./db").join(table);
+
     fs::remove_file(table_path)?;
 
     Ok(())
@@ -112,10 +120,13 @@ where
     T: for<'a> Deserialize<'a> + Serialize,
 {
     let mut data = get_table(table)?;
+
     let increased_next_id = data.next_id.parse::<i32>()?;
+
     let new_id = increased_next_id + 1;
 
     data.records.insert(increased_next_id.to_string(), t);
+
     data.next_id = new_id.to_string();
 
     upgrade_table(table, &data)
@@ -149,7 +160,9 @@ where
     T: for<'a> Deserialize<'a> + Serialize,
 {
     let mut current_table: HashMap<String, T> = get_table_records(table)?;
+
     current_table.remove(id);
+
     update_table(table, &current_table)
 }
 
@@ -158,6 +171,7 @@ where
     T: for<'a> Deserialize<'a> + Serialize,
 {
     let incoming_record: T = find(table, id)?;
+
     serde_json::to_string(&incoming_record).map_err(Error::from)
 }
 
@@ -166,20 +180,22 @@ where
     T: for<'a> Deserialize<'a> + Serialize,
 {
     let records: HashMap<String, T> = get_table_records(table)?;
+
     serde_json::to_string(&records).map_err(Error::from)
 }
 
 pub fn store_json(table: &str, json: &str) -> Result<()> {
     create_db_dir()?;
 
-    let db_table = Path::new("./db").join(table);
+    let db_table = db_table(table);
 
     if db_table.exists() {
         return Ok(());
     }
 
-    let mut buffer = File::create(db_table)?;
-    buffer.write_all(json.as_bytes())?;
+    let writer = buffed_writer(db_table)?;
+
+    serde_json::to_writer(writer, json)?;
 
     Ok(())
 }
@@ -187,28 +203,44 @@ pub fn store_json(table: &str, json: &str) -> Result<()> {
 pub fn update_json(table: &str, json: &str) -> Result<()> {
     create_db_dir()?;
 
-    let db_table = Path::new("./db").join(table);
+    let db_table = db_table(table);
 
-    let mut buffer = File::create(db_table)?;
-    buffer.write_all(json.as_bytes())?;
+    let writer = buffed_writer(db_table)?;
+
+    serde_json::to_writer(writer, json)?;
 
     Ok(())
 }
 
 // Private functions ******************************************************************************
 
-fn upgrade_table<T: Serialize>(table: &str, t: &T) -> Result<()> {
-    let serialized = serde_json::to_string(t)?;
-    let db_table = Path::new("./db").join(table);
+fn db_table(table: &str) -> std::path::PathBuf {
+    Path::new("./db").join(table)
+}
 
-    let mut buffer = File::create(db_table)?;
-    buffer.write_all(serialized.as_bytes())?;
+fn buffed_writer(db_table: PathBuf) -> Result<BufWriter<File>> {
+    let file = File::create(db_table)?;
+
+    let writer = BufWriter::new(file);
+
+    Ok(writer)
+}
+
+fn upgrade_table<T: Serialize>(table: &str, t: &T) -> Result<()> {
+    let db_table = db_table(table);
+
+    let file = File::create(db_table)?;
+
+    let writer = BufWriter::new(file);
+
+    serde_json::to_writer(writer, t)?;
 
     Ok(())
 }
 
 fn create_base_data<T: Serialize>(table: &str, t: T) -> TableData<T> {
     let mut record = HashMap::new();
+
     record.insert("0".to_string(), t);
 
     TableData {
