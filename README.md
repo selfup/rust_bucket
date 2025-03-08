@@ -5,7 +5,7 @@
 * Write to the filesystem for persistence
 * Flexible structured or unstructured tables / records
 * Can infer any data type with Serialize / Deserialize implementations via [Serde](https://github.com/serde-rs/serde)
-* Works on stable, beta, nightly
+* Works on stable!
 * Synchronous performance
 * Suitable for microservices
 * Quick to setup
@@ -17,3 +17,11 @@
 * Project dependent
 * Not yet on crates.io
 * Performance is heavily influenced by SSD / HDD io speeds (but storage is cheap)
+
+### Benchmarks
+
+```
+cargo bench
+
+open target/criterion/report/index.html
+```
