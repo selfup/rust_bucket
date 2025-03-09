@@ -24,6 +24,8 @@ use std::path::PathBuf;
 pub mod errors;
 use errors::{Error, Result};
 
+const DB_PATH: &str = "./db";
+
 // Structure for data storage *********************************************************************
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -90,7 +92,7 @@ pub fn create_empty_table<T: Serialize>(table: &str) -> Result<()> {
 }
 
 pub fn read_table(table: &str) -> Result<String> {
-    let db_table = Path::new("./db").join(table.to_owned());
+    let db_table = Path::new(DB_PATH).join(table.to_owned());
 
     let mut file = match File::open(db_table) {
         Ok(file) => file,
@@ -108,7 +110,7 @@ pub fn read_table(table: &str) -> Result<String> {
 }
 
 pub fn drop_table(table: &str) -> io::Result<()> {
-    let table_path = Path::new("./db").join(table);
+    let table_path = Path::new(DB_PATH).join(table);
 
     fs::remove_file(table_path)?;
 
@@ -215,7 +217,7 @@ pub fn update_json(table: &str, json: &str) -> Result<()> {
 // Private functions ******************************************************************************
 
 fn db_table(table: &str) -> std::path::PathBuf {
-    Path::new("./db").join(table)
+    Path::new(DB_PATH).join(table)
 }
 
 fn buffed_writer(db_table: PathBuf) -> Result<BufWriter<File>> {
@@ -250,12 +252,14 @@ fn create_base_data<T: Serialize>(table: &str, t: T) -> TableData<T> {
     }
 }
 
-fn create_db_dir() -> io::Result<()> {
-    if Path::new("./db").exists() {
+fn create_db_dir() -> Result<()> {
+    if Path::new(DB_PATH).exists() {
         return Ok(());
     }
 
-    fs::create_dir("db")
+    fs::create_dir("db")?;
+
+    Ok(())
 }
 
 // Tests ******************************************************************************************
@@ -264,6 +268,9 @@ fn create_db_dir() -> io::Result<()> {
 mod tests {
     use super::*;
 
+    const TEST: &str = "test";
+    const COORDS: Coordinates = Coordinates { x: 42, y: 9000 };
+
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     pub struct Coordinates {
         pub x: i32,
@@ -271,8 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_create_update_and_drop_a_table_and_take_any_struct_to_add_data() {
-        let a = Coordinates { x: 42, y: 9000 };
+    fn it_can_create_update_and_drop_a_table_and_take_any_struct_to_add_data() -> Result<()> {
         let b = Coordinates { x: 32, y: 8765 };
         let c = Coordinates { x: 23, y: 900 };
         let d = Coordinates { x: 105, y: 7382 };
@@ -280,76 +286,82 @@ mod tests {
         let e = "{\"table\":\"test\",\"next_id\":\"1\",\"records\":{\"0\":{\"x\":42,\"y\":9000}}}";
         let f = "{\"table\":\"test\",\"next_id\":\"1\",\"records\":{\"0\":{\"x\":32,\"y\":8765}}}";
 
-        create_table("test", &a).unwrap();
-        assert_eq!(e, read_table("test").unwrap());
+        create_table(TEST, &COORDS)?;
+        assert_eq!(e, read_table(TEST)?);
 
-        update_table("test", &b).unwrap();
-        assert_eq!(f, read_table("test").unwrap());
+        update_table(TEST, &b)?;
+        assert_eq!(f, read_table(TEST)?);
 
-        drop_table("test").unwrap();
-        create_table("test", &a).unwrap();
+        drop_table(TEST)?;
+        create_table(TEST, &COORDS)?;
 
-        append_records("test", b).unwrap();
-        append_records("test", c).unwrap();
-        append_records("test", d).unwrap();
+        append_records(TEST, b)?;
+        append_records(TEST, c)?;
+        append_records(TEST, d)?;
 
-        assert!(read_table("test").unwrap().contains("2"));
-        assert!(read_table("test").unwrap().contains("3"));
-        assert!(read_table("test").unwrap().contains("4"));
+        let result = read_table(TEST)?;
 
-        drop_table("test").unwrap();
+        assert!(result.contains("2"));
+        assert!(result.contains("3"));
+        assert!(result.contains("4"));
+
+        drop_table(TEST)?;
+
+        Ok(())
     }
 
     #[test]
-    fn it_can_create_100_tables_and_drop_them_all() {
+    fn it_can_create_100_tables_and_drop_them_all() -> Result<()> {
         for n in 1..101 {
             let table = format!("{}", n);
-            let a = Coordinates { x: 42, y: 9000 };
 
-            create_table(&*table, &a).unwrap();
+            create_table(&*table, &COORDS)?;
         }
 
         for k in 1..101 {
             let table = format!("{}", k);
 
-            drop_table(&*table).unwrap();
+            drop_table(&*table)?;
         }
+
+        Ok(())
     }
 
     #[test]
-    fn it_can_create_and_drop_an_empty_table() {
-        let table_name = format!("empty");
+    fn it_can_create_and_drop_an_empty_table() -> Result<()> {
+        let table_name: &str = "empty";
 
-        create_empty_table::<Coordinates>(&*table_name).unwrap();
+        create_empty_table::<Coordinates>(&table_name)?;
 
-        let contents: String = read_table(&*table_name).unwrap();
+        let contents: String = read_table(&table_name)?;
         let expected = "{\"table\":\"empty\",\"next_id\":\"0\",\"records\":{}}";
 
         assert_eq!(expected, contents);
 
-        drop_table(&*table_name).unwrap();
+        drop_table(&table_name)?;
+
+        Ok(())
     }
 
     #[test]
-    fn it_can_get_and_find() {
-        let a = Coordinates { x: 42, y: 9000 };
+    fn it_can_get_and_find() -> Result<()> {
+        create_table("test3", &COORDS)?;
 
-        create_table("test3", &a).unwrap();
+        assert_eq!(COORDS, find("test3", "0")?);
 
-        assert_eq!(a, find("test3", "0").unwrap());
+        drop_table("test3")?;
 
-        drop_table("test3").unwrap();
+        Ok(())
     }
 
     #[test]
-    fn it_can_return_json() {
-        let a = Coordinates { x: 42, y: 9000 };
-        create_table("test5", &a).unwrap();
-        assert_eq!(a, find("test5", "0").unwrap());
+    fn it_can_return_json() -> Result<()> {
+        create_table("test5", &COORDS)?;
+        assert_eq!(COORDS, find("test5", "0")?);
 
-        let b: String = read_table("test5").unwrap();
-        let c: String = json_table_records::<Coordinates>("test5").unwrap();
-        let d: String = json_find::<Coordinates>("test5", "0").unwrap();
+        let b: String = read_table("test5")?;
+        let c: String = json_table_records::<Coordinates>("test5")?;
+        let d: String = json_find::<Coordinates>("test5", "0")?;
 
         let j = "{\"table\":\"test5\",\"next_id\":\"1\",\"records\":{\"0\":{\"x\":42,\"y\":9000}}}";
         assert_eq!(j, b);
@@ -360,26 +372,28 @@ mod tests {
         let l = "{\"x\":42,\"y\":9000}";
         assert_eq!(l, d);
 
-        drop_table("test5").unwrap();
+        drop_table("test5")?;
+
+        Ok(())
     }
 
     #[test]
-    fn it_can_delete_table_data_by_id() {
-        let a = Coordinates { x: 42, y: 9000 };
+    fn it_can_delete_table_data_by_id() -> Result<()> {
+        create_table("test6", &COORDS)?;
 
-        create_table("test6", &a).unwrap();
-
-        assert_eq!(a, find("test6", "0").unwrap());
+        assert_eq!(COORDS, find("test6", "0")?);
 
         let del = delete::<Coordinates>;
-        del("test6", "0").unwrap();
+        del("test6", "0")?;
 
-        let table = read_table("test6").unwrap();
+        let table = read_table("test6")?;
         assert_eq!(
             table,
             "{\"table\":\"test6\",\"next_id\":\"1\",\"records\":{\"0\":{}}}"
         );
 
-        drop_table("test6").unwrap();
+        drop_table("test6")?;
+
+        Ok(())
     }
 }
