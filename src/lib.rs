@@ -10,6 +10,8 @@
 extern crate serde;
 extern crate serde_json;
 
+use flate2::Compression;
+use flate2::write::ZlibEncoder;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -210,6 +212,18 @@ pub fn update_json(table: &str, json: &str) -> Result<()> {
     let writer = buffed_writer(db_table)?;
 
     serde_json::to_writer(writer, json)?;
+
+    Ok(())
+}
+
+pub fn update_json_compressed(table: &str, json: &str) -> Result<()> {
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+
+    encoder.write_all(json);
+
+    let compressed_json = encoder.finish()?;
+
+    update_json(table, compressed_json);
 
     Ok(())
 }
