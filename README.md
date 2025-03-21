@@ -1,5 +1,7 @@
 ## Rust Bucket (work in progress)
 
+![Rust Bucket](https://github.com/user-attachments/assets/ffcb8c10-ca38-4bb2-97dd-1663ccc42093)
+
 ### Goals
 * Provide a simple JSON key-value store API
 * Write to the filesystem for persistence
