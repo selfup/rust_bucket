@@ -361,7 +361,7 @@ fn create_db_dir() -> Result<()> {
 // Tests ******************************************************************************************
 
 #[cfg(test)]
-mod tests {
+mod the_db {
     use super::*;
 
     const TEST: &str = "test";
@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_create_update_and_drop_a_table_and_take_any_struct_to_add_data() -> Result<()> {
+    fn can_crud_generic_data() -> Result<()> {
         let b = Coordinates { x: 32, y: 8765 };
         let c = Coordinates { x: 23, y: 900 };
         let d = Coordinates { x: 105, y: 7382 };
@@ -407,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_create_100_tables_and_drop_them_all() -> Result<()> {
+    fn can_create_100_tables_and_drop_them_all() -> Result<()> {
         for n in 1..101 {
             let table = format!("{}", n);
 
@@ -424,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_create_and_drop_an_empty_table() -> Result<()> {
+    fn can_create_and_drop_an_empty_table() -> Result<()> {
         let table_name: &str = "empty";
 
         create_empty_table::<Coordinates>(&table_name)?;
@@ -440,26 +440,28 @@ mod tests {
     }
 
     #[test]
-    fn it_can_get_and_find() -> Result<()> {
-        create_table("test3", &COORDS)?;
+    fn can_get_and_find() -> Result<()> {
+        create_table("test_3", &COORDS)?;
 
-        assert_eq!(COORDS, find("test3", "0")?);
+        assert_eq!(COORDS, find("test_3", "0")?);
 
-        drop_table("test3")?;
+        drop_table("test_3")?;
 
         Ok(())
     }
 
     #[test]
-    fn it_can_return_json() -> Result<()> {
-        create_table("test5", &COORDS)?;
-        assert_eq!(COORDS, find("test5", "0")?);
+    fn can_return_json() -> Result<()> {
+        create_table("test_5", &COORDS)?;
+        assert_eq!(COORDS, find("test_5", "0")?);
 
-        let b: String = read_table("test5")?;
-        let c: String = json_table_records::<Coordinates>("test5")?;
-        let d: String = json_find::<Coordinates>("test5", "0")?;
+        let b: String = read_table("test_5")?;
+        let c: String = json_table_records::<Coordinates>("test_5")?;
+        let d: String = json_find::<Coordinates>("test_5", "0")?;
 
-        let j = "{\"table\":\"test5\",\"next_id\":\"1\",\"records\":{\"0\":{\"x\":42,\"y\":9000}}}";
+        let j =
+            "{\"table\":\"test_5\",\"next_id\":\"1\",\"records\":{\"0\":{\"x\":42,\"y\":9000}}}";
+
         assert_eq!(j, b);
 
         let k = "{\"0\":{\"x\":42,\"y\":9000}}";
@@ -468,27 +470,28 @@ mod tests {
         let l = "{\"x\":42,\"y\":9000}";
         assert_eq!(l, d);
 
-        drop_table("test5")?;
+        drop_table("test_5")?;
 
         Ok(())
     }
 
     #[test]
-    fn it_can_delete_table_data_by_id() -> Result<()> {
-        create_table("test6", &COORDS)?;
+    fn can_delete_table_data_by_id() -> Result<()> {
+        create_table("test_6", &COORDS)?;
 
-        assert_eq!(COORDS, find("test6", "0")?);
+        assert_eq!(COORDS, find("test_6", "0")?);
 
         let del = delete::<Coordinates>;
-        del("test6", "0")?;
 
-        let table = read_table("test6")?;
+        del("test_6", "0")?;
+
+        let table = read_table("test_6")?;
         assert_eq!(
             table,
-            "{\"table\":\"test6\",\"next_id\":\"1\",\"records\":{\"0\":{}}}"
+            "{\"table\":\"test_6\",\"next_id\":\"1\",\"records\":{\"0\":{}}}"
         );
 
-        drop_table("test6")?;
+        drop_table("test_6")?;
 
         Ok(())
     }
@@ -500,14 +503,14 @@ mod tests {
     }
 
     #[test]
-    fn test_non_existent_table_read() {
+    fn can_test_non_existent_table_read() {
         let result = read_table("non_existent_table");
 
         assert!(matches!(result, Err(Error::NoSuchTable(_))));
     }
 
     #[test]
-    fn test_empty_id_find() -> Result<()> {
+    fn can_test_empty_id_find() -> Result<()> {
         let test_table = "empty_id_test";
 
         let test_record = TestRecord {
@@ -515,17 +518,18 @@ mod tests {
             value: 42,
         };
 
+        let second_test_record = TestRecord {
+            name: "empty_id".to_string(),
+            value: 100,
+        };
+
         create_table(test_table, &test_record)?;
 
         let mut table_data = get_table::<TestRecord>(test_table)?;
 
-        table_data.records.insert(
-            "".to_string(),
-            TestRecord {
-                name: "empty_id".to_string(),
-                value: 100,
-            },
-        );
+        let empty_string = "".to_string();
+
+        table_data.records.insert(empty_string, second_test_record);
 
         let db_path = Path::new("./db").join(test_table);
 
@@ -543,7 +547,7 @@ mod tests {
     }
 
     #[test]
-    fn test_special_chars_in_table_name() -> Result<()> {
+    fn can_test_special_chars_in_table_name() -> Result<()> {
         let test_table = "special!@#$%^&*()_+";
 
         let test_record = TestRecord {
@@ -563,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn test_concurrent_modifications() -> Result<()> {
+    fn can_test_concurrent_modifications() -> Result<()> {
         let test_table = "concurrent_test";
 
         let test_record = TestRecord {
@@ -571,15 +575,14 @@ mod tests {
             value: 42,
         };
 
+        let second_test_record = TestRecord {
+            name: "first".to_string(),
+            value: 100,
+        };
+
         create_table(test_table, &test_record)?;
 
-        append_records(
-            test_table,
-            TestRecord {
-                name: "first".to_string(),
-                value: 100,
-            },
-        )?;
+        append_records(test_table, second_test_record)?;
 
         let modified_record = TestRecord {
             name: "modified".to_string(),
@@ -598,7 +601,7 @@ mod tests {
     }
 
     #[test]
-    fn test_count_records() -> Result<()> {
+    fn can_test_count_records() -> Result<()> {
         let table_name = "count_test";
 
         create_table(table_name, &COORDS)?;
@@ -617,7 +620,7 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_insert() -> Result<()> {
+    fn can_test_batch_insert() -> Result<()> {
         let table_name = "batch_test";
 
         create_empty_table::<Coordinates>(table_name)?;
@@ -648,7 +651,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_record() -> Result<()> {
+    fn can_test_update_record() -> Result<()> {
         let table_name = "update_test";
 
         create_table(table_name, &COORDS)?;
@@ -676,7 +679,7 @@ mod tests {
     }
 
     #[test]
-    fn test_table_exists() -> Result<()> {
+    fn can_test_table_exists() -> Result<()> {
         let table_name = "exists_test";
 
         assert!(!table_exists(table_name));
@@ -693,8 +696,8 @@ mod tests {
     }
 
     #[test]
-    fn test_list_tables() -> Result<()> {
-        let table_names = ["list_test_1", "list_test_2", "list_test_3"];
+    fn can_test_list_tables() -> Result<()> {
+        let table_names = ["test_1", "test_2", "test_3"];
 
         for &name in &table_names {
             if table_exists(name) {
@@ -720,7 +723,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_by() -> Result<()> {
+    fn can_test_find_by() -> Result<()> {
         let table_name = "find_by_test";
 
         create_empty_table::<Coordinates>(table_name)?;
@@ -748,7 +751,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_table() -> Result<()> {
+    fn can_test_clear_table() -> Result<()> {
         let table_name = "clear_test";
 
         create_table(table_name, &COORDS)?;
