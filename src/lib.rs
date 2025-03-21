@@ -214,6 +214,102 @@ pub fn update_json(table: &str, json: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn count_records<T>(table: &str) -> Result<usize>
+where
+    T: for<'a> Deserialize<'a> + Serialize,
+{
+    let records = get_table_records::<T>(table)?;
+
+    Ok(records.len())
+}
+
+pub fn batch_insert<T>(table: &str, records: Vec<T>) -> Result<()>
+where
+    T: for<'a> Deserialize<'a> + Serialize,
+{
+    let mut data = get_table(table)?;
+
+    let mut next_id = data.next_id.parse::<i32>()?;
+
+    for record in records {
+        data.records.insert(next_id.to_string(), record);
+
+        next_id += 1;
+    }
+
+    data.next_id = next_id.to_string();
+
+    upgrade_table(table, &data)
+}
+
+pub fn update_record<T>(table: &str, id: &str, record: T) -> Result<()>
+where
+    T: for<'a> Deserialize<'a> + Serialize,
+{
+    let mut data = get_table(table)?;
+
+    if !data.records.contains_key(id) {
+        return Err(Error::NoSuchKey);
+    }
+
+    data.records.insert(id.to_string(), record);
+
+    upgrade_table(table, &data)
+}
+
+pub fn table_exists(table: &str) -> bool {
+    db_table(table).exists()
+}
+
+pub fn list_tables() -> io::Result<Vec<String>> {
+    let mut tables = Vec::new();
+
+    if !Path::new(DB_PATH).exists() {
+        return Ok(tables);
+    }
+
+    for entry in fs::read_dir(DB_PATH)? {
+        let entry = entry?;
+
+        if let Some(name) = entry.file_name().to_str() {
+            tables.push(name.to_string());
+        }
+    }
+
+    Ok(tables)
+}
+
+pub fn find_by<T, F>(table: &str, predicate: F) -> Result<HashMap<String, T>>
+where
+    T: for<'a> Deserialize<'a> + Serialize,
+    F: Fn(&T) -> bool,
+{
+    let all_records = get_table_records::<T>(table)?;
+
+    let mut matching_records = HashMap::new();
+
+    for (id, record) in all_records {
+        if predicate(&record) {
+            matching_records.insert(id, record);
+        }
+    }
+
+    Ok(matching_records)
+}
+
+pub fn clear_table<T>(table: &str) -> Result<()>
+where
+    T: for<'a> Deserialize<'a> + Serialize,
+{
+    let mut data = get_table::<T>(table)?;
+
+    data.records.clear();
+
+    data.next_id = "0".to_string();
+
+    upgrade_table(table, &data)
+}
+
 // Private functions ******************************************************************************
 
 fn db_table(table: &str) -> std::path::PathBuf {
@@ -265,7 +361,7 @@ fn create_db_dir() -> Result<()> {
 // Tests ******************************************************************************************
 
 #[cfg(test)]
-mod tests {
+mod the_db {
     use super::*;
 
     const TEST: &str = "test";
@@ -278,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_create_update_and_drop_a_table_and_take_any_struct_to_add_data() -> Result<()> {
+    fn can_crud_generic_data() -> Result<()> {
         let b = Coordinates { x: 32, y: 8765 };
         let c = Coordinates { x: 23, y: 900 };
         let d = Coordinates { x: 105, y: 7382 };
@@ -311,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_create_100_tables_and_drop_them_all() -> Result<()> {
+    fn can_create_100_tables_and_drop_them_all() -> Result<()> {
         for n in 1..101 {
             let table = format!("{}", n);
 
@@ -328,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_create_and_drop_an_empty_table() -> Result<()> {
+    fn can_create_and_drop_an_empty_table() -> Result<()> {
         let table_name: &str = "empty";
 
         create_empty_table::<Coordinates>(&table_name)?;
@@ -344,26 +440,28 @@ mod tests {
     }
 
     #[test]
-    fn it_can_get_and_find() -> Result<()> {
-        create_table("test3", &COORDS)?;
+    fn can_get_and_find() -> Result<()> {
+        create_table("test_3", &COORDS)?;
 
-        assert_eq!(COORDS, find("test3", "0")?);
+        assert_eq!(COORDS, find("test_3", "0")?);
 
-        drop_table("test3")?;
+        drop_table("test_3")?;
 
         Ok(())
     }
 
     #[test]
-    fn it_can_return_json() -> Result<()> {
-        create_table("test5", &COORDS)?;
-        assert_eq!(COORDS, find("test5", "0")?);
+    fn can_return_json() -> Result<()> {
+        create_table("test_5", &COORDS)?;
+        assert_eq!(COORDS, find("test_5", "0")?);
 
-        let b: String = read_table("test5")?;
-        let c: String = json_table_records::<Coordinates>("test5")?;
-        let d: String = json_find::<Coordinates>("test5", "0")?;
+        let b: String = read_table("test_5")?;
+        let c: String = json_table_records::<Coordinates>("test_5")?;
+        let d: String = json_find::<Coordinates>("test_5", "0")?;
 
-        let j = "{\"table\":\"test5\",\"next_id\":\"1\",\"records\":{\"0\":{\"x\":42,\"y\":9000}}}";
+        let j =
+            "{\"table\":\"test_5\",\"next_id\":\"1\",\"records\":{\"0\":{\"x\":42,\"y\":9000}}}";
+
         assert_eq!(j, b);
 
         let k = "{\"0\":{\"x\":42,\"y\":9000}}";
@@ -372,27 +470,311 @@ mod tests {
         let l = "{\"x\":42,\"y\":9000}";
         assert_eq!(l, d);
 
-        drop_table("test5")?;
+        drop_table("test_5")?;
 
         Ok(())
     }
 
     #[test]
-    fn it_can_delete_table_data_by_id() -> Result<()> {
-        create_table("test6", &COORDS)?;
+    fn can_delete_table_data_by_id() -> Result<()> {
+        create_table("test_6", &COORDS)?;
 
-        assert_eq!(COORDS, find("test6", "0")?);
+        assert_eq!(COORDS, find("test_6", "0")?);
 
         let del = delete::<Coordinates>;
-        del("test6", "0")?;
 
-        let table = read_table("test6")?;
+        del("test_6", "0")?;
+
+        let table = read_table("test_6")?;
         assert_eq!(
             table,
-            "{\"table\":\"test6\",\"next_id\":\"1\",\"records\":{\"0\":{}}}"
+            "{\"table\":\"test_6\",\"next_id\":\"1\",\"records\":{\"0\":{}}}"
         );
 
-        drop_table("test6")?;
+        drop_table("test_6")?;
+
+        Ok(())
+    }
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    pub struct TestRecord {
+        pub name: String,
+        pub value: i32,
+    }
+
+    #[test]
+    fn can_test_non_existent_table_read() {
+        let result = read_table("non_existent_table");
+
+        assert!(matches!(result, Err(Error::NoSuchTable(_))));
+    }
+
+    #[test]
+    fn can_test_empty_id_find() -> Result<()> {
+        let test_table = "empty_id_test";
+
+        let test_record = TestRecord {
+            name: "test".to_string(),
+            value: 42,
+        };
+
+        let second_test_record = TestRecord {
+            name: "empty_id".to_string(),
+            value: 100,
+        };
+
+        create_table(test_table, &test_record)?;
+
+        let mut table_data = get_table::<TestRecord>(test_table)?;
+
+        let empty_string = "".to_string();
+
+        table_data.records.insert(empty_string, second_test_record);
+
+        let db_path = Path::new("./db").join(test_table);
+
+        let file = std::fs::File::create(db_path)?;
+
+        serde_json::to_writer(file, &table_data)?;
+
+        let found = find::<TestRecord>(test_table, "")?;
+
+        assert_eq!(found.name, "empty_id");
+
+        drop_table(test_table)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_special_chars_in_table_name() -> Result<()> {
+        let test_table = "special!@#$%^&*()_+";
+
+        let test_record = TestRecord {
+            name: "test".to_string(),
+            value: 42,
+        };
+
+        create_table(test_table, &test_record)?;
+
+        let read_record: TestRecord = find(test_table, "0")?;
+
+        assert_eq!(read_record, test_record);
+
+        drop_table(test_table)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_concurrent_modifications() -> Result<()> {
+        let test_table = "concurrent_test";
+
+        let test_record = TestRecord {
+            name: "original".to_string(),
+            value: 42,
+        };
+
+        let second_test_record = TestRecord {
+            name: "first".to_string(),
+            value: 100,
+        };
+
+        create_table(test_table, &test_record)?;
+
+        append_records(test_table, second_test_record)?;
+
+        let modified_record = TestRecord {
+            name: "modified".to_string(),
+            value: 200,
+        };
+
+        append_records(test_table, modified_record)?;
+
+        let records = get_table_records::<TestRecord>(test_table)?;
+
+        assert_eq!(records.len(), 3); // Original + 2 appends
+
+        drop_table(test_table)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_count_records() -> Result<()> {
+        let table_name = "count_test";
+
+        create_table(table_name, &COORDS)?;
+
+        assert_eq!(count_records::<Coordinates>(table_name)?, 1);
+
+        append_records(table_name, Coordinates { x: 10, y: 20 })?;
+
+        append_records(table_name, Coordinates { x: 30, y: 40 })?;
+
+        assert_eq!(count_records::<Coordinates>(table_name)?, 3);
+
+        drop_table(table_name)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_batch_insert() -> Result<()> {
+        let table_name = "batch_test";
+
+        create_empty_table::<Coordinates>(table_name)?;
+
+        assert_eq!(count_records::<Coordinates>(table_name)?, 0);
+
+        let batch = vec![
+            Coordinates { x: 1, y: 2 },
+            Coordinates { x: 3, y: 4 },
+            Coordinates { x: 5, y: 6 },
+        ];
+
+        batch_insert(table_name, batch)?;
+
+        assert_eq!(count_records::<Coordinates>(table_name)?, 3);
+
+        let records = get_table_records::<Coordinates>(table_name)?;
+
+        assert!(records.contains_key("0"));
+
+        assert!(records.contains_key("1"));
+
+        assert!(records.contains_key("2"));
+
+        drop_table(table_name)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_update_record() -> Result<()> {
+        let table_name = "update_test";
+
+        create_table(table_name, &COORDS)?;
+
+        let record: Coordinates = find(table_name, "0")?;
+
+        assert_eq!(record, COORDS);
+
+        let updated = Coordinates { x: 999, y: 888 };
+
+        let expected = Coordinates { x: 999, y: 888 };
+
+        update_record(table_name, "0", updated)?;
+
+        let record: Coordinates = find(table_name, "0")?;
+
+        assert_eq!(record, expected);
+
+        let result = update_record::<Coordinates>(table_name, "999", COORDS);
+
+        assert!(matches!(result, Err(Error::NoSuchKey)));
+
+        drop_table(table_name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_table_exists() -> Result<()> {
+        let table_name = "exists_test";
+
+        assert!(!table_exists(table_name));
+
+        create_table(table_name, &COORDS)?;
+
+        assert!(table_exists(table_name));
+
+        drop_table(table_name)?;
+
+        assert!(!table_exists(table_name));
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_list_tables() -> Result<()> {
+        let table_names = ["test_1", "test_2", "test_3"];
+
+        for &name in &table_names {
+            if table_exists(name) {
+                drop_table(name)?;
+            }
+        }
+
+        for &name in &table_names {
+            create_table(name, &COORDS)?;
+        }
+
+        let tables = list_tables()?;
+
+        for &name in &table_names {
+            assert!(tables.contains(&name.to_string()));
+        }
+
+        for &name in &table_names {
+            drop_table(name)?;
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_find_by() -> Result<()> {
+        let table_name = "find_by_test";
+
+        create_empty_table::<Coordinates>(table_name)?;
+
+        let test_data = vec![
+            Coordinates { x: 10, y: 10 },
+            Coordinates { x: 20, y: 10 },
+            Coordinates { x: 30, y: 30 },
+            Coordinates { x: 40, y: 10 },
+        ];
+
+        batch_insert(table_name, test_data)?;
+
+        let matching = find_by::<Coordinates, _>(table_name, |coord| coord.y == 10)?;
+
+        assert_eq!(matching.len(), 3);
+
+        let matching = find_by::<Coordinates, _>(table_name, |coord| coord.x > 20)?;
+
+        assert_eq!(matching.len(), 2);
+
+        drop_table(table_name)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_test_clear_table() -> Result<()> {
+        let table_name = "clear_test";
+
+        create_table(table_name, &COORDS)?;
+
+        append_records(table_name, Coordinates { x: 100, y: 200 })?;
+
+        append_records(table_name, Coordinates { x: 300, y: 400 })?;
+
+        assert_eq!(count_records::<Coordinates>(table_name)?, 3);
+
+        clear_table::<Coordinates>(table_name)?;
+
+        assert_eq!(count_records::<Coordinates>(table_name)?, 0);
+
+        let table_data = get_table::<Coordinates>(table_name)?;
+
+        assert_eq!(table_data.next_id, "0");
+
+        append_records(table_name, COORDS)?;
+
+        assert_eq!(count_records::<Coordinates>(table_name)?, 1);
+
+        drop_table(table_name)?;
 
         Ok(())
     }
